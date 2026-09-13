@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL DEFAULT 'public', -- 'public', 'captain', 'crew', 'dalal', 'admin'
     phone VARCHAR(20),
     harbour_name VARCHAR(100) DEFAULT 'Mumbai Sassoon Dock',
+    status VARCHAR(20) DEFAULT 'Approved', -- 'Pending', 'Approved', 'Rejected'
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

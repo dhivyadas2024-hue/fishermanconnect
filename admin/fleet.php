@@ -29,6 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_add_vessel']))
     exit;
 }
 
+// Handle Action: Update User Registration Status (Approve/Reject/Delete)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_user_status'])) {
+    $user_id = intval($_POST['user_id']);
+    $status = trim($_POST['status']);
+    
+    if ($status === 'DELETE') {
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        set_flash('success', 'User registration deleted from queue.');
+    } else {
+        $stmt = $pdo->prepare("UPDATE users SET status = ? WHERE id = ?");
+        $stmt->execute([$user_id, $status]);
+        set_flash('success', 'User registration ' . strtolower($status) . ' successfully!');
+    }
+    header('Location: /admin/fleet.php#user-approvals');
+    exit;
+}
+
 // Handle Action: Update Ad Status (Approve/Reject/Delete)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_ad_status'])) {
     $ad_id = intval($_POST['ad_id']);
@@ -96,6 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_post_announcem
     exit;
 }
 
+// Fetch Users for Admin Approvals Desk
+$all_registered_users = $pdo->query("SELECT * FROM users ORDER BY id DESC")->fetchAll();
+$pending_users = array_filter($all_registered_users, fn($u) => ($u['status'] ?? 'Approved') === 'Pending');
+
 // Fetch Vessels with Captain Name & Crew Count
 $stmt = $pdo->query("
     SELECT v.*, u.full_name as captain_name, u.phone as captain_phone,
@@ -107,8 +129,8 @@ $stmt = $pdo->query("
 $vessels = $stmt->fetchAll();
 
 // Fetch Captain Users & Crew Candidates for Dropdowns
-$captains = $pdo->query("SELECT id, full_name, username FROM users WHERE role = 'captain'")->fetchAll();
-$all_users = $pdo->query("SELECT id, full_name, role, username FROM users WHERE role IN ('captain', 'crew')")->fetchAll();
+$captains = $pdo->query("SELECT id, full_name, username FROM users WHERE role = 'captain' AND (status IS NULL OR status = 'Approved')")->fetchAll();
+$all_users = $pdo->query("SELECT id, full_name, role, username FROM users WHERE role IN ('captain', 'crew') AND (status IS NULL OR status = 'Approved')")->fetchAll();
 
 // Fetch All Ads for Corporate Analytics & Reports
 $all_ads_admin = $pdo->query("SELECT * FROM ads ORDER BY id DESC")->fetchAll();
@@ -133,33 +155,29 @@ require_once __DIR__ . '/../includes/header.php';
     </button>
 </div>
 
-<!-- Fleet Overview Summary -->
+<!-- Admin Overview Summary Cards -->
 <div class="row g-3 mb-4">
     <div class="col-md-3">
-        <div class="card card-maritime p-3 text-center border-start border-4 border-primary shadow-sm">
-            <span class="text-muted small text-uppercase fw-bold">Total Registered Fleet</span>
-            <div class="fs-2 fw-bold text-navy"><?= count($vessels) ?></div>
+        <div class="card card-maritime p-3 text-center border-start border-4 border-warning shadow-sm">
+            <span class="text-muted small text-uppercase fw-bold">Pending Registrations</span>
+            <div class="fs-2 fw-bold text-dark"><?= count($pending_users) ?></div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card card-maritime p-3 text-center border-start border-4 border-success shadow-sm">
-            <span class="text-muted small text-uppercase fw-bold">Docked at Harbour</span>
-            <div class="fs-2 fw-bold text-success">
-                <?= count(array_filter($vessels, fn($v) => $v['status'] === 'Docked')) ?>
-            </div>
+        <div class="card card-maritime p-3 text-center border-start border-4 border-primary shadow-sm">
+            <span class="text-muted small text-uppercase fw-bold">Total Approved Users</span>
+            <div class="fs-2 fw-bold text-navy"><?= count(array_filter($all_registered_users, fn($u) => ($u['status'] ?? 'Approved') === 'Approved')) ?></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card card-maritime p-3 text-center border-start border-4 border-info shadow-sm">
-            <span class="text-muted small text-uppercase fw-bold">Active at Sea</span>
-            <div class="fs-2 fw-bold text-info">
-                <?= count(array_filter($vessels, fn($v) => in_array($v['status'], ['Fishing', 'Cruising', 'Anchored']))) ?>
-            </div>
+            <span class="text-muted small text-uppercase fw-bold">Active Fleet</span>
+            <div class="fs-2 fw-bold text-info"><?= count($vessels) ?></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card card-maritime p-3 text-center border-start border-4 border-danger shadow-sm">
-            <span class="text-muted small text-uppercase fw-bold">Emergency Distress</span>
+            <span class="text-muted small text-uppercase fw-bold">Active Emergency SOS</span>
             <div class="fs-2 fw-bold text-danger">
                 <?= count(array_filter($vessels, fn($v) => $v['status'] === 'Distress')) ?>
             </div>
@@ -314,6 +332,100 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <button type="submit" class="btn btn-warning w-100 fw-bold">Publish Broadcast Alert &raquo;</button>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== USER REGISTRATION APPROVAL & VERIFICATION DESK ==================== -->
+<div class="mt-5" id="user-approvals">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="fw-bold text-navy mb-0"><i class="bi bi-person-check-fill text-primary me-2"></i> User Registration Approval & Verification Desk</h3>
+            <p class="text-muted mb-0">Admins review and approve new Captain, Dalal, Crew, and Public user accounts before platform access is granted.</p>
+        </div>
+        <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+            <i class="bi bi-hourglass-split me-1"></i> <?= count($pending_users) ?> Pending Approvals
+        </span>
+    </div>
+
+    <div class="card card-maritime p-4 shadow-sm mb-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>User / Username</th>
+                        <th>Role Requested</th>
+                        <th>Phone & Harbour</th>
+                        <th>Registration Date</th>
+                        <th>Status</th>
+                        <th>Admin Approval Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($all_registered_users as $u): 
+                        $st = $u['status'] ?? 'Approved';
+                        $badge_cls = 'bg-success';
+                        if ($st === 'Pending') $badge_cls = 'bg-warning text-dark';
+                        elseif ($st === 'Rejected') $badge_cls = 'bg-danger';
+                    ?>
+                    <tr>
+                        <td>
+                            <strong class="text-navy"><?= sanitize($u['full_name']) ?></strong>
+                            <div class="small text-muted font-monospace">@<?= sanitize($u['username']) ?></div>
+                        </td>
+                        <td>
+                            <span class="badge bg-navy text-uppercase px-2 py-1"><?= sanitize($u['role']) ?></span>
+                        </td>
+                        <td>
+                            <div><i class="bi bi-telephone me-1"></i><?= sanitize($u['phone'] ?: 'N/A') ?></div>
+                            <small class="text-muted"><i class="bi bi-geo-alt me-1"></i><?= sanitize($u['harbour_name'] ?: 'Mumbai Sassoon Dock') ?></small>
+                        </td>
+                        <td>
+                            <small class="text-muted"><?= date('M j, Y H:i', strtotime($u['created_at'])) ?></small>
+                        </td>
+                        <td>
+                            <span class="badge <?= $badge_cls ?>"><?= sanitize($st) ?></span>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <?php if ($st !== 'Approved'): ?>
+                                    <form method="POST" class="d-inline">
+                                        <input type="hidden" name="action_user_status" value="1">
+                                        <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                        <input type="hidden" name="status" value="Approved">
+                                        <button type="submit" class="btn btn-sm btn-success fw-bold" title="Approve Registration">
+                                            <i class="bi bi-check-circle me-1"></i> Approve
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+
+                                <?php if ($st !== 'Rejected'): ?>
+                                    <form method="POST" class="d-inline">
+                                        <input type="hidden" name="action_user_status" value="1">
+                                        <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                        <input type="hidden" name="status" value="Rejected">
+                                        <button type="submit" class="btn btn-sm btn-warning fw-bold text-dark" title="Reject Registration">
+                                            <i class="bi bi-x-circle me-1"></i> Reject
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+
+                                <?php if ($u['role'] !== 'admin'): ?>
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('Permanently delete this user account?');">
+                                        <input type="hidden" name="action_user_status" value="1">
+                                        <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                        <input type="hidden" name="status" value="DELETE">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete User">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

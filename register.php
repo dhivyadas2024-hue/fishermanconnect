@@ -24,22 +24,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_flash('danger', 'Username already taken. Please choose another.');
         } else {
             $hashed_pass = password_hash($password, PASSWORD_BCRYPT);
-            $stmt = $pdo->prepare("INSERT INTO users (username, password, full_name, role, phone, harbour_name) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$username, $hashed_pass, $full_name, $role, $phone, $harbour_name]);
+            // Default pending for specialized operational roles (captain, dalal, crew)
+            $status = in_array($role, ['captain', 'dalal', 'crew']) ? 'Pending' : 'Approved';
+
+            $stmt = $pdo->prepare("INSERT INTO users (username, password, full_name, role, phone, harbour_name, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$username, $hashed_pass, $full_name, $role, $phone, $harbour_name, $status]);
             
             $user_id = $pdo->lastInsertId();
-            $_SESSION['user'] = [
-                'id' => $user_id,
-                'username' => $username,
-                'full_name' => $full_name,
-                'role' => $role,
-                'phone' => $phone,
-                'harbour_name' => $harbour_name
-            ];
 
-            set_flash('success', 'Registration successful! Welcome to Project Fisherman.');
-            header('Location: /public/index.php');
-            exit;
+            if ($status === 'Pending') {
+                set_flash('warning', 'Registration submitted! Your ' . strtoupper($role) . ' account is pending verification and approval by Harbour Admin.');
+                header('Location: /login.php');
+                exit;
+            } else {
+                $_SESSION['user'] = [
+                    'id' => $user_id,
+                    'username' => $username,
+                    'full_name' => $full_name,
+                    'role' => $role,
+                    'phone' => $phone,
+                    'harbour_name' => $harbour_name,
+                    'status' => 'Approved'
+                ];
+
+                set_flash('success', 'Registration successful! Welcome to Project Fisherman.');
+                header('Location: /public/index.php');
+                exit;
+            }
         }
     } else {
         set_flash('warning', 'Please fill in all required fields.');

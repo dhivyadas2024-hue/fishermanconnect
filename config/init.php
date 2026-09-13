@@ -30,6 +30,12 @@ function initialize_database() {
         // Execute multiple statements
         $pdo->exec($sql);
         seed_initial_data($pdo);
+    } else {
+        try {
+            $pdo->exec("ALTER TABLE users ADD COLUMN status VARCHAR(20) DEFAULT 'Approved'");
+        } catch (Exception $e) {
+            // Column already exists
+        }
     }
 }
 

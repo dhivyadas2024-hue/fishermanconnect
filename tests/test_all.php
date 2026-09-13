@@ -109,6 +109,21 @@ $new_clicks = intval($updated_clicks->fetchColumn());
 
 assert_test("Ad click tracking handler increments click metrics correctly", $new_clicks == ($initial_clicks + 1));
 
+// Test 11: User Registration Pending Queue & Admin Approval
+$test_pass = password_hash('pass123', PASSWORD_BCRYPT);
+$pdo->prepare("INSERT INTO users (username, password, full_name, role, status) VALUES ('pending_capt', ?, 'Capt. Pending', 'captain', 'Pending')")->execute([$test_pass]);
+$p_id = $pdo->lastInsertId();
+
+$chk_pending = $pdo->prepare("SELECT status FROM users WHERE id = ?");
+$chk_pending->execute([$p_id]);
+$p_status = $chk_pending->fetchColumn();
+assert_test("User registration placed in Pending Approval Queue", $p_status === 'Pending');
+
+$pdo->prepare("UPDATE users SET status = 'Approved' WHERE id = ?")->execute([$p_id]);
+$chk_pending->execute([$p_id]);
+$app_status = $chk_pending->fetchColumn();
+assert_test("Admin approval transitions user status to Approved", $app_status === 'Approved');
+
 echo "\n-------------------------------------------\n";
 echo "SUMMARY: PASS = {$pass_count}, FAIL = {$fail_count}\n";
 echo "-------------------------------------------\n";

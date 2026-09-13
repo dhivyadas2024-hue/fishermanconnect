@@ -38,14 +38,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user'] = $user;
-            set_flash('success', 'Welcome back, ' . $user['full_name'] . '!');
-            
-            if ($user['role'] === 'admin') header('Location: /admin/fleet.php');
-            elseif ($user['role'] === 'dalal') header('Location: /dalal/rates.php');
-            elseif ($user['role'] === 'captain') header('Location: /captain/catch_declaration.php');
-            else header('Location: /public/index.php');
-            exit;
+            $user_status = $user['status'] ?? 'Approved';
+            if ($user_status === 'Pending') {
+                set_flash('warning', 'Your registration is currently pending Harbour Admin review and approval.');
+            } elseif ($user_status === 'Rejected') {
+                set_flash('danger', 'Your registration request was rejected by Harbour Administration.');
+            } else {
+                $_SESSION['user'] = $user;
+                set_flash('success', 'Welcome back, ' . $user['full_name'] . '!');
+                
+                if ($user['role'] === 'admin') header('Location: /admin/fleet.php');
+                elseif ($user['role'] === 'dalal') header('Location: /dalal/rates.php');
+                elseif ($user['role'] === 'captain') header('Location: /captain/catch_declaration.php');
+                else header('Location: /public/index.php');
+                exit;
+            }
         } else {
             set_flash('danger', 'Invalid username or password.');
         }
